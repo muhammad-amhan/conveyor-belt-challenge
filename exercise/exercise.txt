@@ -1,0 +1,63 @@
+There is a factory production line around a single conveyor belt.
+
+Components (of type A, B, and C) come onto the start of the belt at random
+intervals; workers must take one component of each type from the belt
+as they come past, and combine them to make a finished product.
+
+The belt is divided into fixed-size slots; each slot can hold only one
+component or one finished product.  There are several workers
+stations on either side of the belt, spaced to match the size of the
+slots on the belt, like this (fixed-width font ASCII diagram):
+       v   v   v   v   v   v   v   v       workers
+     ---------------------------------
+  -> | A |   | B | A | P | C |   | B | ->     conveyor belt
+     ---------------------------------
+       ^   ^   ^   ^   ^   ^   ^   ^       workers
+
+In each unit of time, the belt moves forward one position, and there
+is time for a worker on one side of each slot to EITHER take an item
+from the slot or place an item into the slot.  The worker opposite
+them can't touch the same belt slot while they do this.
+(So you can't have one worker picking something from a slot while
+their counterpart puts something down in the same place).
+
+Once a worker has collected any two types of components(from A, B, and C), they
+can begin assembling the intermediate product, and once the intermediate
+product is ready, the worker can pick the remaining component and begin
+assembling the final product.
+
+It takes three units of time to assemble using any two items to create
+intermediate product or final product. During the assembly process, workers
+can not touch the conveyor belt. Workers can only hold
+two items (a component, intermediate product, or final product) at a time, one
+in each hand.
+
+You should create a simulation of this, with three pairs of workers. At each
+time interval, the slot at the start of the conveyor belt should have
+an equal (1/3) chance of containing nothing, a component A or a
+component B or component C
+
+Run the simulation for 100 steps, and compute how many finished
+products come off the production line, and how many components of each
+type goes through the production line without being picked up by any
+workers.
+
+A few pointers:
+ - Your implementation should be in C, C++, Python, or Shell
+   (choose any as per your preference).
+ - You should expect to spend no more than two hours on this exercise.
+ - The code does not have to be "production quality", but we will be
+   looking for evidence that it's written to be somewhat flexible and that
+   a third party would be able to read and maintain it.
+ - Be sure to state (or comment) your assumptions.
+ - During the interview, we may ask about the effect of changing certain
+   aspects of the simulation (e.g. the length of the conveyor belt).
+ - Flexibility in the solution is preferred, but we are also looking
+   for a sensible decision on where this adds too much complexity.
+   (Where would it be better to rewrite the code for a different
+   scenario, rather than spending much more than the allotted time
+   creating an overly complicated, but very flexible simulation engine?)
+-  Make sure your code doesn't require any application or development
+   environment to compile & execute.
+
+Please provide build instructions for the command line
