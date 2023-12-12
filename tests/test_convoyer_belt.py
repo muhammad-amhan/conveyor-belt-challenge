@@ -8,15 +8,17 @@ from utilities.error_handling import InvalidComponent, DuplicateComponent
 
 class Factory:
     def __init__(
-         self,
-         belt_length=3,
-         belt_steps=50,
-         finished_product='P',
-         assembly_time=0,
-         workers_per_slot=1
+        self,
+        belt_length=3,
+        belt_steps=50,
+        finished_product='P',
+        assembly_time=0,
+        workers_per_slot=1,
+        belt_speed=0,
     ):
         self.belt_length = belt_length
         self.belt_steps = belt_steps
+        self.belt_speed = belt_speed
         self.finished_product = finished_product
         self.assembly_time = assembly_time
         self.workers_per_slot = workers_per_slot
@@ -26,11 +28,12 @@ class Factory:
             components=['A', 'B', 'C'],
             finished_product=self.finished_product,
         )
+        self.belt = ConveyorBelt(self.belt_length, self.product, self.belt_speed)
+
         self.workers = [
-            [Worker(self.product) for _ in range(self.workers_per_slot)]
+            [Worker(self.belt, self.product) for _ in range(self.workers_per_slot)]
             for _ in range(self.belt_length)
         ]
-        self.belt = ConveyorBelt(self.belt_length, self.product)
 
 
 class TestProduct:

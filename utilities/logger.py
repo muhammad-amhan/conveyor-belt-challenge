@@ -2,7 +2,7 @@ import logging
 
 
 class Logger:
-    def __init__(self, name: str = __name__):
+    def __init__(self, name: str = 'log'):
         self.logger = logging.getLogger(name)
 
     def configure_logging(self, debug: bool):
