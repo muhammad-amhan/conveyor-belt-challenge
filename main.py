@@ -30,9 +30,7 @@ from utilities.logger import Logger
 ERROR_CODE = 1
 SUCCESS_CODE = 0
 
-verbose = True
-log = Logger()
-log.configure_logging(verbose)
+log = Logger(__name__)
 
 
 class Product:
@@ -291,9 +289,10 @@ def run_simulation(belt: ConveyorBelt, workers: [Worker], debug: bool = False) -
 
 
 if __name__ == '__main__':
+    # Measure execution
     start = timer()
     #  These configs can be passed via CLI using args parser
-    _debug = True
+    _debug = False
     _belt_length = 5
     _workers_per_slot = 1
     _belt_iterations = 100
@@ -303,6 +302,7 @@ if __name__ == '__main__':
     _assembled_products_combinations = []
     _item_interval_range = 2
 
+    log.configure_logging(_debug)
     _product = Product(
         # ['A', 'B', 'C', 'D', 'E', 'F', 'AC', 'G', '1', '2', '3', '4', '5', None]
         items=['A', 'B', 'C', 'D', None],
