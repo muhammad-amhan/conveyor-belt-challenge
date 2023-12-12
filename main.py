@@ -1,44 +1,42 @@
 """
 Assumptions:
-1) Items can come into the belt at random intervals
-    - Set the random interval to be between 1 and 5 seconds
-    - For speed, I have set it to 0
-2) Each slot can hold one component or a finished product (P - bound to user input) or nothing
-3) Each slot has two workers
-    - I have made it that each slot can have a dynamic number of workers bound to user input
-4) Every 1 second, the belt moves one position
-    - For speed, I have made it 0 seconds
-5) Each worker can either pick a component or place a finished product onto the slot (one worker operates on each slot)
+1) Items can come into the belt at random intervals.
+2) Each slot can hold one component or a finished product (e.g. "P" - bound to user input) or nothing.
+3) Each slot has two workers.
+    - I have made it that each slot can have a dynamic number of workers bound to user input.
+4) Every 1 second, the belt moves one position. This can be user defined.
+5) Each worker can either pick a component or place a finished product onto the slot (one worker operates on each slot).
 6) It takes 3 seconds to assemble an intermediate product or a final product
-    - This means some components will be passing without being picked up
-    - I have made that 1 second for speed
-7) During the 1-second assembly time, workers can't interact with the belt
+    - This means some components will be passing without being picked up by any worker.
+7) During the 3-second assembly time, workers can't interact with the belt.
     - Workers can remain holding any two of (component, intermediate product, or a finished product) at a time in each
      hand e.g. (BC, A) or (None, C) or (None, A), or (P, None)
-8) There should be an equal chance of any items to enter the belt
-9) If a worker constructed an intermediate product, look only for the missing final component
-10) The intermediate product is always assembled and placed in the worker's left hand
+8) There should be an equal chance of any items to enter the belt.
+9) If a worker constructed an intermediate product, look only for the missing final component.
+10) The intermediate product is always assembled and placed in the worker's left hand.
     - e.g. ('A', 'B') -> ('AB', None) -> found C -> pick C -> ('AB', 'C') -> ('P', None)
     - When a final component is found it should be picked by the right hand, then assembled in the left hand
-      as presented above
-11) A unit of time is defined as any number (e.g. 1) in seconds
+      as presented above.
+11) A unit of time is defined as 1 second
 """
 
-from random import choice, uniform
+from random import choice
 from time import sleep, time
 from typing import Union, Dict, List
 from timeit import default_timer as timer
-
 from utilities.error_handling import EmptySlotRequired, InvalidComponent, DuplicateComponent
 from utilities.logger import Logger
 
 ERROR_CODE = 1
 SUCCESS_CODE = 0
+
+verbose = True
 log = Logger()
+log.configure_logging(verbose)
 
 
 class Product:
-    def __init__(self, items: List[Union[str, None]], components: List[str], finished_product: str):
+    def __init__(self, items: List[Union[str, None]], components: List[str], finished_product: str, item_interval_range: int):
         """
         A class that defined wha a product is made up of, how often it enters the belt, and what goes onto its slots.
 
@@ -46,8 +44,10 @@ class Product:
         :param components: A list of all components and any other special or alphanumerical or empty characters.
         :param finished_product: A combination of all components mark a finished product
                  e.g. AB12, 1BA2, B2A1 => maps to a value on the belt to mark what the finished product should look like
+        :param item_interval_range: The upper limit range for items to be released onto the slot.
+                The interval is randomly picked from 0 and the specified range.
         """
-        self.item_interval = self.get_random_number(0, 0)
+        self.item_interval_range = item_interval_range
         self.items = items
         self.components = components
         self.finished_product = finished_product
@@ -89,12 +89,7 @@ class Product:
             log.error(e)
             exit(ERROR_CODE)
 
-    @staticmethod
-    def get_random_number(x: int = 0, y: int = 0):
-        return uniform(x, y)
-
     def get_item_randomly(self) -> str:
-        sleep(self.item_interval)
         return choice(self.items)
 
 
@@ -142,11 +137,17 @@ class ConveyorBelt:
         else:
             self.unpicked_components_counter['other'] += 1
 
-        sleep(self.belt_speed)
+        # The belt can use sleep(1) but not the worker during assembling otherwise it will hold the belt from moving
+        # sleep(0) will cause unexpected behavior. In Python, it may hint to the OS that the current thread
+        #   is willing to giv up its time slot to allow other threads or processes to run. It causes race conditions
+        #   or concurrency issues and so on.
+        if self.belt_speed > 0:
+            sleep(self.belt_speed)
         self.slots = [self.product.get_item_randomly()] + self.slots[:-1]
         # Count each slot move when a worker is assembling
         #   otherwise they are not counted as part of the "steps/iterations" resulting in more iterations than specified
         self.belt_iterations -= 1
+        log.debug(f'Belt: {self.slots}')
 
     def remove_component(self, slot_index: int):
         self.slots[slot_index] = None
@@ -176,11 +177,11 @@ class Worker:
         Worker.next_id += 1
 
     def process_item(self, item: str) -> bool:
-        if (item == self.product.finished_product) or (item not in self.product.components):
-            return False
-
         if self.hands_occupied():
             self.assemble_component()
+            return False
+
+        if (item == self.product.finished_product) or (item not in self.product.components):
             return False
 
         elif self.right_hand is None:
@@ -211,20 +212,19 @@ class Worker:
             return False
         return len(self.left_hand) == len(self.product.components)
 
-    def reset_hands(self):
+    def reset_hands(self) -> None:
         # If the right hand happened to have picked a component while the left has a finished product
         #   then reset only the left hand.
 
         if self.right_hand is None:
             self.left_hand = None
             return
-
         self.left_hand = None
 
-    def hands_occupied(self):
+    def hands_occupied(self) -> bool:
         return (self.left_hand is not None) and (self.right_hand is not None)
 
-    def assemble_component(self):
+    def assemble_component(self) -> None:
         if self.holds_finished_product():
             # There is a component in the right hand which will be used to build the next product
             return
@@ -244,11 +244,10 @@ class Worker:
         end_assembly = time() + self.assembly_time
         while time() < end_assembly:
             log.debug(f'Moving the belt while worker ({self.worker_id}) is assembling...')
-            log.debug(f'Belt: {self.belt.slots}')
             self.belt.move_belt()
 
         actual_assembly_duration = time() - (end_assembly - self.assembly_time)
-        log.debug(f'Actual assembly duration: {actual_assembly_duration:.3f} seconds')
+        log.debug(f'Actual assembly duration: {int(actual_assembly_duration)} seconds')
 
     def release_finished_product(self, slot_index: int):
         self.belt.slots[slot_index] = self.product.finished_product
@@ -264,11 +263,11 @@ def run_simulation(belt: ConveyorBelt, workers: [Worker], debug: bool = False) -
     :param debug: Whether to display extra debugging log messages
     :return: A list of finished product combinations
     """
-    log.configure_logging(debug)
+    # global verbose
+    # verbose = debug
 
-    while belt.belt_iterations != 0:
+    while belt.belt_iterations >= 0:
         belt.move_belt()
-        log.debug(f'Belt: {belt.slots}')
 
         for i in range(belt.belt_length):
             item = belt.slots[i]
@@ -288,8 +287,7 @@ def run_simulation(belt: ConveyorBelt, workers: [Worker], debug: bool = False) -
                     belt.remove_component(slot_index=i)
                     break
 
-    assembled_products_combinations = ConveyorBelt.assembled_products_combination
-    return assembled_products_combinations
+    return ConveyorBelt.assembled_products_combination
 
 
 if __name__ == '__main__':
@@ -303,12 +301,14 @@ if __name__ == '__main__':
     _finished_product = 'P'
     _assembly_time = 3
     _assembled_products_combinations = []
+    _item_interval_range = 2
 
     _product = Product(
         # ['A', 'B', 'C', 'D', 'E', 'F', 'AC', 'G', '1', '2', '3', '4', '5', None]
         items=['A', 'B', 'C', 'D', None],
         components=['A', 'B', 'C'],
         finished_product=_finished_product,
+        item_interval_range=_item_interval_range,
     )
     _product.validate()
     _belt = ConveyorBelt(_belt_length, _product, _belt_iterations, _belt_speed)

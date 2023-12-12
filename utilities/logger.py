@@ -7,7 +7,7 @@ class Logger:
 
     def configure_logging(self, debug: bool):
         verbose = logging.DEBUG if debug else logging.INFO
-        logging.basicConfig(level=verbose)
+        logging.basicConfig(level=verbose, format='%(asctime)s %(name)s %(levelname)s:%(message)s')
         return self.logger
 
     def debug(self, message):
