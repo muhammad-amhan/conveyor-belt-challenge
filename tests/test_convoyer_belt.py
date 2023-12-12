@@ -10,14 +10,14 @@ class Factory:
     def __init__(
         self,
         belt_length=3,
-        belt_steps=50,
+        belt_iterations=50,
         finished_product='P',
         assembly_time=0,
         workers_per_slot=1,
         belt_speed=0,
     ):
         self.belt_length = belt_length
-        self.belt_steps = belt_steps
+        self.belt_iterations = belt_iterations
         self.belt_speed = belt_speed
         self.finished_product = finished_product
         self.assembly_time = assembly_time
@@ -28,7 +28,7 @@ class Factory:
             components=['A', 'B', 'C'],
             finished_product=self.finished_product,
         )
-        self.belt = ConveyorBelt(self.belt_length, self.product, self.belt_speed)
+        self.belt = ConveyorBelt(self.belt_length, self.product, self.belt_iterations, self.belt_speed)
 
         self.workers = [
             [Worker(self.belt, self.product) for _ in range(self.workers_per_slot)]
@@ -102,7 +102,7 @@ class TestWorker:
         yield factory
 
     def test_validate_assembled_product_combinations(self, factory):
-        product_combinations = run_simulation(factory.belt, factory.workers, factory.belt_steps)
+        product_combinations = run_simulation(factory.belt, factory.workers)
 
         for product_combination in product_combinations:
             assert len(product_combination) == len(factory.product.components)

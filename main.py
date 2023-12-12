@@ -29,7 +29,7 @@ from time import sleep, time
 from typing import Union, Dict, List
 from timeit import default_timer as timer
 
-from utilities.error_handling import EmptySlotRequired, InvalidComponent, DuplicateComponent, AssemblyError
+from utilities.error_handling import EmptySlotRequired, InvalidComponent, DuplicateComponent
 from utilities.logger import Logger
 
 ERROR_CODE = 1
@@ -183,17 +183,21 @@ class Worker:
             self.assemble_component()
             return False
 
+        elif self.right_hand is None:
+            if self.left_hand is None:
+                self.right_hand = item
+            # Since intermediate product and finished product are always assembled in the left hand
+            #   the right hand should still be able to pick a component while the left has a finished product
+            elif self.holds_finished_product():
+                self.right_hand = item
+            elif item not in self.left_hand:
+                self.right_hand = item
+
         elif self.left_hand is None:
             if self.right_hand is None:
                 self.left_hand = item
             elif item not in self.right_hand:
                 self.left_hand = item
-
-        elif self.right_hand is None:
-            if self.left_hand is None:
-                self.right_hand = item
-            elif item not in self.left_hand:
-                self.right_hand = item
         else:
             log.debug(f'Nothing for worker ({self.worker_id})')
             return False
@@ -208,16 +212,22 @@ class Worker:
         return len(self.left_hand) == len(self.product.components)
 
     def reset_hands(self):
-        self.right_hand = None
+        # If the right hand happened to have picked a component while the left has a finished product
+        #   then reset only the left hand.
+
+        if self.right_hand is None:
+            self.left_hand = None
+            return
+
         self.left_hand = None
 
     def hands_occupied(self):
         return (self.left_hand is not None) and (self.right_hand is not None)
 
     def assemble_component(self):
-        if not len(self.left_hand) < len(self.product.components):
-            raise AssemblyError(f'Assembly error: inconsistent components in worker\'s hands '
-                                f'({self.left_hand} | {self.right_hand})')
+        if self.holds_finished_product():
+            # There is a component in the right hand which will be used to build the next product
+            return
 
         self.left_hand += self.right_hand
         self.right_hand = None
@@ -295,8 +305,9 @@ if __name__ == '__main__':
     _assembled_products_combinations = []
 
     _product = Product(
-        items=['A', 'B', 'C', 'D', 'E', 'F', 'AC', 'G', '1', '2', '3', '4', '5', None],
-        components=['A', '2', 'C'],
+        # ['A', 'B', 'C', 'D', 'E', 'F', 'AC', 'G', '1', '2', '3', '4', '5', None]
+        items=['A', 'B', 'C', 'D', None],
+        components=['A', 'B', 'C'],
         finished_product=_finished_product,
     )
     _product.validate()
