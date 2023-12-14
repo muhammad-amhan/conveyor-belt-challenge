@@ -3,7 +3,7 @@ import re
 import pytest
 
 from main import ConveyorBelt, Worker, Product, run_simulation
-from utilities.error_handling import InvalidComponent, DuplicateComponent, AssemblyError
+from utilities.error_handling import InvalidComponent, DuplicateComponent, InconsistentProduct
 
 
 class Factory:
@@ -53,8 +53,8 @@ class TestProduct:
         factory.product.finished_product = finished_product
         factory.product.components.append(finished_product)
 
-        with pytest.raises(InvalidComponent, match=f'Component "{finished_product}" is wasting the workers\' time'):
-            factory.product.validate_supplied_components()
+        with pytest.raises(InvalidComponent):
+            assert f'Component "{finished_product}" is wasting worker' in factory.product.validate_supplied_components()
 
     def test_invalid_component_character_type(self, factory):
         invalid_components = ['', '?', '#', ' ']
@@ -63,27 +63,27 @@ class TestProduct:
             with pytest.raises(InvalidComponent) as e:
                 factory.product.components.append(component)
                 factory.product.validate_supplied_components()
-                assert e.value.args[0] == f'Component "{component}" is invalid.'
+                assert f'Component "{component}" is invalid' in e.value.args[0]
 
             factory.product.components.pop()
 
     def test_component_cannot_be_none(self, factory):
         factory.product.components.append(None)
 
-        with pytest.raises(InvalidComponent, match='Supplied an empty component.'):
-            factory.product.validate_supplied_components()
+        with pytest.raises(InvalidComponent):
+            assert 'Supplied an empty component' in factory.product.validate_supplied_components()
 
     def test_component_must_be_singular(self, factory):
         factory.product.items.append('AC')
         factory.product.components.append('AC')
-        with pytest.raises(InvalidComponent, match='Component "AC" must be singular'):
-            factory.product.validate_supplied_components()
+        with pytest.raises(InvalidComponent):
+            assert 'Component "AC" must be singular' in factory.product.validate_supplied_components()
 
     def test_reject_component_if_not_supplied_in_item(self, factory):
         components = ['F', 'G']
         factory.product.components = components
-        with pytest.raises(InvalidComponent, match=f'Component "G" is not recognized.'):
-            factory.product.validate_supplied_components()
+        with pytest.raises(InvalidComponent):
+            assert 'Component "G" is not recognized' in factory.product.validate_supplied_components()
 
         factory.product.items.extend(['G'])
         factory.product.validate_supplied_components()
@@ -95,9 +95,10 @@ class TestProduct:
         factory.product.validate_supplied_components()
 
     def test_reject_duplicate_component(self, factory):
-        factory.product.components.extend('A')
-        with pytest.raises(DuplicateComponent, match=f'Component "A" is duplicate.'):
-            factory.product.validate_supplied_components()
+        component = 'A'
+        factory.product.components.extend(component)
+        with pytest.raises(DuplicateComponent):
+            assert f'Component "{component}" is duplicate' in factory.product.validate_supplied_components()
 
 
 class TestWorker:
@@ -129,7 +130,7 @@ class TestWorker:
         worker.left_hand = 'A'
         worker.right_hand = 'B'
         intermediate_product = 'AB'
-        worker.assemble_component()
+        worker.assemble()
 
         assert worker.left_hand == intermediate_product
         assert worker.right_hand is None
@@ -139,23 +140,24 @@ class TestWorker:
         worker.left_hand = 'AB'
         worker.right_hand = 'C'
         product_combination = 'ABC'
-        worker.assemble_component()
+        worker.assemble()
 
         assert worker.left_hand == product_combination
         assert worker.right_hand is None
 
-    def test_worker_holds_finished_product(self, factory):
+    def test_worker_holds_valid_finished_product(self, factory):
         worker = factory.workers[0][0]
         worker.left_hand = 'ABC'
-        assert worker.holds_finished_product() is True
+        assert worker.assembled_finished_product() is True
 
+    def test_worker_holds_invalid_finished_product(self, factory):
+        worker = factory.workers[0][0]
         worker.left_hand = 'AB'
-        assert worker.holds_finished_product() is False
+        assert worker.assembled_finished_product() is False
 
-        worker.left_hand = 'ABB'
-        assert worker.holds_finished_product() is False
+        inconsistent_products = ['ABB', 'AFB', 'ABCB', 'ABCD']
+        for product in inconsistent_products:
+            worker.left_hand = product
+            with pytest.raises(InconsistentProduct) as e:
+                assert f'Inconsistent product "{product}" by worker "{worker.worker_id}"' in worker.assembled_finished_product()
 
-        worker.left_hand = 'AFB'
-        with pytest.raises(AssemblyError) as e:
-            assert worker.holds_finished_product() == (f'Inconsistent components in worker "{worker.worker_id}": '
-                                                       f'({worker.left_hand} | {worker.right_hand})')
