@@ -129,7 +129,7 @@ class TestWorker:
         worker.left_hand = 'A'
         worker.right_hand = 'B'
         intermediate_product = 'AB'
-        worker.pick_item('C')
+        worker.assemble_component()
 
         assert worker.left_hand == intermediate_product
         assert worker.right_hand is None
@@ -139,7 +139,7 @@ class TestWorker:
         worker.left_hand = 'AB'
         worker.right_hand = 'C'
         product_combination = 'ABC'
-        worker.pick_item('F')
+        worker.assemble_component()
 
         assert worker.left_hand == product_combination
         assert worker.right_hand is None
