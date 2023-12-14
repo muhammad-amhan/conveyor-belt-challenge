@@ -272,14 +272,13 @@ def run_simulation(belt: ConveyorBelt, workers: [Worker], debug: bool = False) -
                 product_type = worker.assemble_component()
                 if product_type:
                     log.info(f'Worker ({worker.worker_id}) assembled {product_type}: ({worker.left_hand} | {worker.right_hand})')
-                    break
 
-                if item is None:
+                elif item is None:
                     if worker.release_finished_product(slot_index=i):
                         log.debug(f'Worker ({worker.worker_id}) released a product ({worker.left_hand}): {worker.belt.slots}')
-                        break
 
-                if item is not None:
+                # `item` is not None
+                else:
                     if not worker.pick_item(item):
                         log.debug(f'Nothing for worker ({worker.worker_id})')
                         break
