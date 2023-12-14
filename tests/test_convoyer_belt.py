@@ -161,3 +161,18 @@ class TestWorker:
             with pytest.raises(InconsistentProduct) as e:
                 assert f'Inconsistent product "{product}" by worker "{worker.worker_id}"' in worker.assembled_finished_product()
 
+
+class TestBelt:
+    @pytest.fixture
+    def factory(self):
+        factory = Factory()
+        yield factory
+
+    def test_iterations_match_the_data_counters(self, factory):
+        belt = factory.belt
+        workers = factory.workers
+        iterations = belt.belt_iterations
+        run_simulation(belt, workers)
+
+        data_counters_total = sum(belt.unpicked_components_counter.values()) + sum(belt.finished_products_counter.values())
+        assert iterations == data_counters_total

@@ -22,7 +22,7 @@ Assumptions:
 
 from random import choice
 from time import sleep, time
-from typing import Union, Dict, List
+from typing import Dict, List
 from timeit import default_timer as timer
 from utilities.error_handling import EmptySlotRequired, InvalidComponent, DuplicateComponent, InconsistentProduct
 from utilities.logger import Logger
@@ -34,7 +34,7 @@ log = Logger(__name__)
 
 
 class Product:
-    def __init__(self, items: List[Union[str, None]], components: List[str], finished_product: str,
+    def __init__(self, items: List[str | None], components: List[str], finished_product: str,
                  item_interval_range: int):
         """
         A class that defined wha a product is made up of, how often it enters the belt, and what goes onto its slots.
@@ -115,7 +115,7 @@ class ConveyorBelt:
         self.finished_products_counter = self.generate_counter(self.product.finished_product)
 
     @staticmethod
-    def generate_counter(data: Union[List[str], str]) -> Dict[str, int]:
+    def generate_counter(data: List[str] | str) -> Dict[str, int]:
         local_data = data
         if isinstance(data, str):
             local_data = [data]
@@ -178,7 +178,11 @@ class Worker:
         Worker.next_id += 1
 
     def pick_item(self, item: str) -> bool:
-        if (item == self.product.finished_product) or (item not in self.product.components):
+        if item == self.product.finished_product:
+            return False
+        if item not in self.product.components:
+            return False
+        if self.holds_finished_product and self.right_hand is not None:
             return False
 
         if self.right_hand is None:
@@ -192,24 +196,29 @@ class Worker:
                 self.right_hand = item
             else:
                 # The left hand has either a component or an intermediate product
-                #   and the `item` is a component that is in the left hand.
+                #   and the `item` exists in the left hand.
                 return False
 
         elif self.left_hand is None:
             if self.right_hand is None:
                 self.left_hand = item
-            if item not in self.right_hand:
+            elif item not in self.right_hand:
                 self.left_hand = item
             else:
+                # The right hand has the same component as `item`
                 return False
+        else:
+            # The worker has an intermediate product in the left hand and a component in the right hand
+            return False
         return True
 
     def assembled_finished_product(self) -> bool:
         if self.left_hand is None:
             return False
 
-        if (not all(component in self.product.components for component in self.left_hand)
-                or len(set(self.left_hand)) != len(self.left_hand)
+        if (
+            not all(component in self.product.components for component in self.left_hand)
+            or len(set(self.left_hand)) != len(self.left_hand)
         ):
             raise InconsistentProduct(
                 f'Inconsistent product "{self.left_hand}" by worker "{self.worker_id}"')
@@ -221,11 +230,12 @@ class Worker:
         #   a product then reset only the left hand once the product is released
         #   otherwise, the right hand would be None anyway.
         self.left_hand = None
+        self.holds_finished_product = False
 
     def hands_occupied(self) -> bool:
         return (self.left_hand is not None) and (self.right_hand is not None)
 
-    def assemble(self) -> Union[str, None]:
+    def assemble(self) -> str | None:
         if not self.hands_occupied() or self.holds_finished_product:
             return None
 
@@ -238,12 +248,15 @@ class Worker:
         while time() < end_assembly:
             log.debug(f'Moving the belt while worker ({self.worker_id}) is assembling...')
             self.belt.move_belt()
+            # Special handling for when the belt moves during the assembly process
+            #   as it's not captured by the outter while loop.
+            if self.belt.belt_iterations == 0:
+                break
 
         actual_assembly_duration = time() - (end_assembly - self.assembly_time)
         log.debug(f'Actual assembly duration: {int(actual_assembly_duration)} seconds')
 
-        # return 'finished' if len(self.left_hand) == len(self.product.components) else 'intermediate'
-        return self.left_hand
+        return 'finished' if len(self.left_hand) == len(self.product.components) else 'intermediate'
 
     def release_finished_product(self, slot_index: int) -> bool:
         if not self.holds_finished_product:
@@ -251,37 +264,38 @@ class Worker:
 
         self.belt.slots[slot_index] = self.product.finished_product
         ConveyorBelt.assembled_products_combination.extend([self.left_hand])
+        log.debug(f'Worker ({self.worker_id}) released a product ({self.left_hand}): {self.belt.slots}')
         self.reset_left_hand()
+        return True
 
 
-def run_simulation(belt: ConveyorBelt, workers: [Worker], debug: bool = False) -> List[str]:
+def run_simulation(belt: ConveyorBelt, workers: [Worker]) -> List[str]:
     """
     :param belt: A belt object
     :param workers: A list of N number of worker objects
-    :param debug: Whether to display extra debugging log messages
     :return: A list of finished product combinations
     """
-    log.configure_logging(debug)
-    while belt.belt_iterations >= 0:
+    while belt.belt_iterations > 0:
         belt.move_belt()
+        log.info(f'Iteration: {belt.belt_iterations}')
 
         for i in range(belt.belt_length):
+            # Special handling for when the belt moves during the assembly process
+            #   as it's not captured by the outter while loop.
+            if belt.belt_iterations == 0:
+                break
+
             item = belt.slots[i]
             workers_per_slot = workers[i]
 
             for worker in workers_per_slot:
-                worker.holds_finished_product = worker.assembled_finished_product()
-
                 product_type = worker.assemble()
-                if product_type:
+                if product_type is not None:
                     log.info(
-                        f'Worker ({worker.worker_id}) assembled {product_type}: ({worker.left_hand} | {worker.right_hand})')
+                        f'Worker ({worker.worker_id}) assembled {product_type} product: ({worker.left_hand} | {worker.right_hand})')
 
                 elif item is None:
-                    if worker.release_finished_product(slot_index=i):
-                        log.debug(
-                            f'Worker ({worker.worker_id}) released a product ({worker.left_hand}): {worker.belt.slots}')
-
+                    worker.release_finished_product(slot_index=i)
                 # `item` is not None
                 else:
                     if not worker.pick_item(item):
@@ -291,6 +305,10 @@ def run_simulation(belt: ConveyorBelt, workers: [Worker], debug: bool = False) -
                     log.debug(f'Worker ({worker.worker_id}) picked a component: {item}')
                     log.debug(f'Worker ({worker.worker_id}) hands: ({worker.left_hand} | {worker.right_hand})')
                     belt.remove_component(slot_index=i)
+
+                # Update left hand status
+                worker.holds_finished_product = worker.assembled_finished_product()
+        log.info('-' * 40)
 
     return ConveyorBelt.assembled_products_combination
 
@@ -309,6 +327,8 @@ if __name__ == '__main__':
     _assembled_products_combinations = []
     _item_interval_range = 2
 
+    log.configure_logging(_debug)
+
     _product = Product(
         # ['A', 'B', 'C', 'D', 'E', 'F', 'AC', 'G', '1', '2', '3', '4', '5', None]
         items=['A', 'B', 'C', 'D', None],
@@ -324,18 +344,14 @@ if __name__ == '__main__':
     ]
 
     try:
-        _assembled_products_combinations = run_simulation(
-            belt=_belt,
-            workers=_workers,
-            debug=_debug,
-        )
+        _assembled_products_combinations = run_simulation(belt=_belt, workers=_workers)
     except InconsistentProduct as e:
         log.error(e)
         exit(ERROR_CODE)
     except KeyboardInterrupt:
         log.info("Exiting...")
 
-    print(f'\n___________________________')
+    print('-' * 40)
     log.info(f'The products combinations: {_assembled_products_combinations}')
     log.info(f'Unpicked components: {_belt.unpicked_components_counter}')
     log.info(f'Finished products: {_belt.finished_products_counter}')
