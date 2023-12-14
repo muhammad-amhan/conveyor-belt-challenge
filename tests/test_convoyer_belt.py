@@ -174,5 +174,5 @@ class TestBelt:
         iterations = belt.belt_iterations
         run_simulation(belt, workers)
 
-        data_counters_total = sum(belt.unpicked_components_counter.values()) + sum(belt.finished_products_counter.values())
-        assert iterations == data_counters_total
+        sum_of_data_counters = sum(belt.unpicked_components_counter.values()) + sum(belt.finished_products_counter.values())
+        assert iterations == sum_of_data_counters

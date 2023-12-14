@@ -128,9 +128,8 @@ class ConveyorBelt:
 
     def move_belt(self):
         last_item = self.slots[-1]
-        finished_product = self.product.finished_product
 
-        if last_item == finished_product:
+        if last_item == self.product.finished_product:
             self.finished_products_counter[last_item] += 1
         elif last_item in self.product.components:
             self.unpicked_components_counter[last_item] += 1
@@ -220,8 +219,7 @@ class Worker:
             not all(component in self.product.components for component in self.left_hand)
             or len(set(self.left_hand)) != len(self.left_hand)
         ):
-            raise InconsistentProduct(
-                f'Inconsistent product "{self.left_hand}" by worker "{self.worker_id}"')
+            raise InconsistentProduct(f'Inconsistent product "{self.left_hand}" by worker "{self.worker_id}"')
 
         return len(self.left_hand) == len(self.product.components)
 
@@ -265,6 +263,7 @@ class Worker:
         self.belt.slots[slot_index] = self.product.finished_product
         ConveyorBelt.assembled_products_combination.extend([self.left_hand])
         log.debug(f'Worker ({self.worker_id}) released a product ({self.left_hand}): {self.belt.slots}')
+
         self.reset_left_hand()
         return True
 
@@ -291,13 +290,11 @@ def run_simulation(belt: ConveyorBelt, workers: [Worker]) -> List[str]:
             for worker in workers_per_slot:
                 product_type = worker.assemble()
                 if product_type is not None:
-                    log.info(
-                        f'Worker ({worker.worker_id}) assembled {product_type} product: ({worker.left_hand} | {worker.right_hand})')
+                    log.info(f'Worker ({worker.worker_id}) assembled {product_type} product: ({worker.left_hand} | {worker.right_hand})')
 
                 elif item is None:
                     worker.release_finished_product(slot_index=i)
-                # `item` is not None
-                else:
+                elif item is not None:
                     if not worker.pick_item(item):
                         log.debug(f'Nothing for worker ({worker.worker_id})')
                         break
