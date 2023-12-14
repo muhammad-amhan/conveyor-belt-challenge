@@ -24,7 +24,7 @@ from random import choice
 from time import sleep, time
 from typing import Union, Dict, List
 from timeit import default_timer as timer
-from utilities.error_handling import EmptySlotRequired, InvalidComponent, DuplicateComponent
+from utilities.error_handling import EmptySlotRequired, InvalidComponent, DuplicateComponent, AssemblyError
 from utilities.logger import Logger
 
 ERROR_CODE = 1
@@ -34,7 +34,8 @@ log = Logger(__name__)
 
 
 class Product:
-    def __init__(self, items: List[Union[str, None]], components: List[str], finished_product: str, item_interval_range: int):
+    def __init__(self, items: List[Union[str, None]], components: List[str], finished_product: str,
+                 item_interval_range: int):
         """
         A class that defined wha a product is made up of, how often it enters the belt, and what goes onto its slots.
 
@@ -70,6 +71,7 @@ class Product:
                 raise InvalidComponent(f'Component "{component}" is wasting the workers\' time.')
             if component not in self.items:
                 raise InvalidComponent(f'Component "{component}" is not recognized. Please check supplied items.')
+            # Can alternatively use set() and ignore duplicates instead of raising an exception
             if len([comp for comp in self.components if comp == component]) != 1:
                 raise DuplicateComponent(f'Component "{component}" is duplicate.')
 
@@ -172,70 +174,63 @@ class Worker:
         self.belt = belt
         self.assembly_time = assembly_time
         self.worker_id = Worker.next_id
+        self.has_finished_product = False
         Worker.next_id += 1
 
-    def process_item(self, item: str) -> bool:
-        if self.hands_occupied():
-            self.assemble_component()
-            return False
-
+    def pick_item(self, item: str) -> bool:
         if (item == self.product.finished_product) or (item not in self.product.components):
             return False
 
-        elif self.right_hand is None:
-            if self.left_hand is None:
-                self.right_hand = item
+        if self.right_hand is None:
             # Since intermediate product and finished product are always assembled in the left hand
-            #   the right hand should still be able to pick a component while the left has a finished product
-            elif self.holds_finished_product():
+            #   the right hand should still be able to pick a component while the left has a finished product.
+            if self.has_finished_product:
+                self.right_hand = item
+            elif self.left_hand is None:
                 self.right_hand = item
             elif item not in self.left_hand:
                 self.right_hand = item
+            else:
+                # The left hand has either a component or an intermediate product
+                #   and the `item` is a component that is in the left hand.
+                return False
 
         elif self.left_hand is None:
             if self.right_hand is None:
                 self.left_hand = item
-            elif item not in self.right_hand:
+            if item not in self.right_hand:
                 self.left_hand = item
-        else:
-            log.debug(f'Nothing for worker ({self.worker_id})')
-            return False
-
-        log.debug(f'Worker ({self.worker_id}) picked a component: {item}')
-        log.debug(f'Worker ({self.worker_id}) hands: ({self.left_hand} | {self.right_hand})')
+            else:
+                return False
         return True
 
     def holds_finished_product(self) -> bool:
         if self.left_hand is None:
             return False
-        return len(self.left_hand) == len(self.product.components)
 
-    def reset_hands(self) -> None:
-        # If the right hand happened to have picked a component while the left has a finished product
-        #   then reset only the left hand.
+        if len(set(self.left_hand)) != len(self.product.components):
+            return False
 
-        if self.right_hand is None:
-            self.left_hand = None
-            return
+        if not all(component in self.product.components for component in self.left_hand):
+            raise AssemblyError(
+                f'Inconsistent components in worker "{self.worker_id}": ({self.left_hand} | {self.right_hand})')
+        return True
+
+    def reset_left_hand(self) -> None:
+        # If the right hand happened to have picked a component before the left hand had the opportunity to release
+        #   a product then reset only the left hand once the product is released
+        #   otherwise, the right hand would be None anyway.
         self.left_hand = None
 
     def hands_occupied(self) -> bool:
         return (self.left_hand is not None) and (self.right_hand is not None)
 
-    def assemble_component(self) -> None:
-        if self.holds_finished_product():
-            # There is a component in the right hand which will be used to build the next product
-            return
+    def assemble_component(self) -> Union[str, None]:
+        if not self.hands_occupied() or self.has_finished_product:
+            return None
 
         self.left_hand += self.right_hand
         self.right_hand = None
-
-        if len(self.left_hand) == len(self.product.components):
-            log.info(
-                f'Worker ({self.worker_id}) assembled a finished product: ({self.left_hand} | {self.right_hand})')
-        else:
-            log.info(
-                f'Worker ({self.worker_id}) assembled intermediate product: ({self.left_hand} | {self.right_hand})')
 
         # Assembling an intermediate product or a finished product takes 3 seconds
         #   during which the belt should continue moving but no worker will interact with it.
@@ -247,11 +242,15 @@ class Worker:
         actual_assembly_duration = time() - (end_assembly - self.assembly_time)
         log.debug(f'Actual assembly duration: {int(actual_assembly_duration)} seconds')
 
-    def release_finished_product(self, slot_index: int):
+        return 'finished' if len(self.left_hand) == len(self.product.components) else 'intermediate'
+
+    def release_finished_product(self, slot_index: int) -> bool:
+        if not self.holds_finished_product():
+            return False
+
         self.belt.slots[slot_index] = self.product.finished_product
         ConveyorBelt.assembled_products_combination.extend([self.left_hand])
-        log.debug(f'Worker ({self.worker_id}) released a product ({self.left_hand}): {self.belt.slots}')
-        self.reset_hands()
+        self.reset_left_hand()
 
 
 def run_simulation(belt: ConveyorBelt, workers: [Worker], debug: bool = False) -> List[str]:
@@ -261,9 +260,7 @@ def run_simulation(belt: ConveyorBelt, workers: [Worker], debug: bool = False) -
     :param debug: Whether to display extra debugging log messages
     :return: A list of finished product combinations
     """
-    # global verbose
-    # verbose = debug
-
+    log.configure_logging(debug)
     while belt.belt_iterations >= 0:
         belt.move_belt()
 
@@ -272,18 +269,24 @@ def run_simulation(belt: ConveyorBelt, workers: [Worker], debug: bool = False) -
             workers_per_slot = workers[i]
 
             for worker in workers_per_slot:
+                product_type = worker.assemble_component()
+                if product_type:
+                    log.info(f'Worker ({worker.worker_id}) assembled {product_type}: ({worker.left_hand} | {worker.right_hand})')
+                    break
+
                 if item is None:
-                    if worker.holds_finished_product():
-                        worker.release_finished_product(slot_index=i)
+                    if worker.release_finished_product(slot_index=i):
+                        log.debug(f'Worker ({worker.worker_id}) released a product ({worker.left_hand}): {worker.belt.slots}')
                         break
 
                 if item is not None:
-                    picked = worker.process_item(item)
-                    if not picked:
+                    if not worker.pick_item(item):
+                        log.debug(f'Nothing for worker ({worker.worker_id})')
                         break
 
+                    log.debug(f'Worker ({worker.worker_id}) picked a component: {item}')
+                    log.debug(f'Worker ({worker.worker_id}) hands: ({worker.left_hand} | {worker.right_hand})')
                     belt.remove_component(slot_index=i)
-                    break
 
     return ConveyorBelt.assembled_products_combination
 
@@ -292,7 +295,7 @@ if __name__ == '__main__':
     # Measure execution
     start = timer()
     #  These configs can be passed via CLI using args parser
-    _debug = False
+    _debug = True
     _belt_length = 5
     _workers_per_slot = 1
     _belt_iterations = 100
@@ -302,7 +305,6 @@ if __name__ == '__main__':
     _assembled_products_combinations = []
     _item_interval_range = 2
 
-    log.configure_logging(_debug)
     _product = Product(
         # ['A', 'B', 'C', 'D', 'E', 'F', 'AC', 'G', '1', '2', '3', '4', '5', None]
         items=['A', 'B', 'C', 'D', None],
@@ -323,6 +325,9 @@ if __name__ == '__main__':
             workers=_workers,
             debug=_debug,
         )
+    except AssemblyError as e:
+        log.error(e)
+        exit(ERROR_CODE)
     except KeyboardInterrupt:
         log.info("Exiting...")
 

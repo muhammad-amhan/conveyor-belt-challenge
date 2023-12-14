@@ -3,19 +3,20 @@ import re
 import pytest
 
 from main import ConveyorBelt, Worker, Product, run_simulation
-from utilities.error_handling import InvalidComponent, DuplicateComponent
+from utilities.error_handling import InvalidComponent, DuplicateComponent, AssemblyError
 
 
 class Factory:
     def __init__(
-        self,
-        belt_length=3,
-        belt_iterations=50,
-        finished_product='P',
-        assembly_time=0,
-        workers_per_slot=1,
-        belt_speed=0,
-        item_interval_range=0,
+            self,
+            belt_length=3,
+            belt_iterations=100,
+            finished_product='P',
+            assembly_time=0,
+            workers_per_slot=1,
+            belt_speed=0,
+            item_interval_range=0,
+            debug=False,
     ):
         self.belt_length = belt_length
         self.belt_iterations = belt_iterations
@@ -24,6 +25,7 @@ class Factory:
         self.assembly_time = assembly_time
         self.workers_per_slot = workers_per_slot
         self.item_interval_range = item_interval_range
+        self.debug = debug
 
         self.product = Product(
             items=['A', 'B', 'C', 'D', 'E', 'F', None],
@@ -115,29 +117,45 @@ class TestWorker:
     def test_worker_ignores_unwanted_components(self, factory):
         finished_product = factory.product.finished_product
         worker = factory.workers[0][0]
-        picked = worker.process_item(finished_product)
+        picked = worker.pick_item(finished_product)
         assert not picked
 
         not_in_components = 'X'
-        picked = worker.process_item(not_in_components)
+        picked = worker.pick_item(not_in_components)
         assert not picked
 
-    def test_assemble_intermediate_product(self, factory):
+    def test_assemble_intermediate_product_success(self, factory):
         worker = factory.workers[0][0]
         worker.left_hand = 'A'
         worker.right_hand = 'B'
         intermediate_product = 'AB'
-        worker.process_item('C')
+        worker.pick_item('C')
 
         assert worker.left_hand == intermediate_product
         assert worker.right_hand is None
 
-    def test_assemble_finished_product(self, factory):
+    def test_assemble_finished_product_success(self, factory):
         worker = factory.workers[0][0]
         worker.left_hand = 'AB'
         worker.right_hand = 'C'
         product_combination = 'ABC'
-        worker.process_item('F')
+        worker.pick_item('F')
 
         assert worker.left_hand == product_combination
         assert worker.right_hand is None
+
+    def test_worker_holds_finished_product(self, factory):
+        worker = factory.workers[0][0]
+        worker.left_hand = 'ABC'
+        assert worker.holds_finished_product() is True
+
+        worker.left_hand = 'AB'
+        assert worker.holds_finished_product() is False
+
+        worker.left_hand = 'ABB'
+        assert worker.holds_finished_product() is False
+
+        worker.left_hand = 'AFB'
+        with pytest.raises(AssemblyError) as e:
+            assert worker.holds_finished_product() == (f'Inconsistent components in worker "{worker.worker_id}": '
+                                                       f'({worker.left_hand} | {worker.right_hand})')
