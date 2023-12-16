@@ -321,9 +321,9 @@ if __name__ == '__main__':
     _belt_length = 5
     _workers_per_slot = 1
     _belt_iterations = 1000
-    _belt_speed = 0
+    _belt_speed = 1
     _finished_product = 'P'
-    _assembly_time = 2
+    _assembly_time = 3
     _assembled_products_combinations = []
     _item_interval_range = 2
 
