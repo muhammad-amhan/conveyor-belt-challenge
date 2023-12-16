@@ -181,7 +181,7 @@ class Worker:
             return False
         if item not in self.product.components:
             return False
-        if self.holds_finished_product and self.right_hand is not None:
+        if self.hands_occupied():
             return False
 
         if self.right_hand is None:
@@ -206,9 +206,6 @@ class Worker:
             else:
                 # The right hand has the same component as `item`
                 return False
-        else:
-            # The worker has an intermediate product in the left hand and a component in the right hand
-            return False
         return True
 
     def assembled_finished_product(self) -> bool:
@@ -243,6 +240,10 @@ class Worker:
         # Assembling an intermediate product or a finished product takes 3 seconds
         #   during which the belt should continue moving but no worker will interact with it.
         end_assembly = time() + self.assembly_time
+        if self.assembly_time > 0 and self.belt.belt_speed == 0:
+            log.warning('The belt is moving too fast. '
+                        'It may finish running while a worker is assembling a product. '
+                        'Consider slowing it down by >= 0.5 second.')
         while time() < end_assembly:
             log.debug(f'Moving the belt while worker ({self.worker_id}) is assembling...')
             self.belt.move_belt()
@@ -317,10 +318,10 @@ if __name__ == '__main__':
     _debug = True
     _belt_length = 5
     _workers_per_slot = 1
-    _belt_iterations = 100
-    _belt_speed = 1
+    _belt_iterations = 1000
+    _belt_speed = 0
     _finished_product = 'P'
-    _assembly_time = 3
+    _assembly_time = 2
     _assembled_products_combinations = []
     _item_interval_range = 2
 
@@ -353,5 +354,5 @@ if __name__ == '__main__':
     log.info(f'Unpicked components: {_belt.unpicked_components_counter}')
     log.info(f'Finished products: {_belt.finished_products_counter}')
 
-    print(f"======== Execution time: {(timer() - start):.1f} seconds ========")
+    print(f'======== Execution time: {(timer() - start):.1f} seconds ========')
     exit(SUCCESS_CODE)
