@@ -9,7 +9,7 @@ class Logger:
         verbose = logging.DEBUG if debug else logging.INFO
         logging.basicConfig(
             level=verbose,
-            format='%(asctime)s %(levelname)s - %(message)s',
+            format='%(asctime)s %(levelname)s: %(message)s',
             datefmt='%H:%M:%S',
         )
         return self.logger

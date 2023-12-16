@@ -107,7 +107,7 @@ class TestWorker:
         factory = Factory()
         yield factory
 
-    def test_validate_assembled_product_combinations(self, factory):
+    def test_valid_assembled_product_combinations(self, factory):
         product_combinations = run_simulation(factory.belt, factory.workers)
 
         for product_combination in product_combinations:

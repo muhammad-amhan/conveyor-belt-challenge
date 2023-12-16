@@ -147,6 +147,7 @@ class ConveyorBelt:
         #   otherwise they are not counted as part of the "steps/iterations" resulting in more iterations than specified
         self.belt_iterations -= 1
         log.debug(f'Belt: {self.slots}')
+        log.info(f'Iteration: {self.belt_iterations}')
 
     def remove_component(self, slot_index: int):
         self.slots[slot_index] = None
@@ -241,9 +242,11 @@ class Worker:
         #   during which the belt should continue moving but no worker will interact with it.
         end_assembly = time() + self.assembly_time
         if self.assembly_time > 0 and self.belt.belt_speed == 0:
-            log.warning('The belt is moving too fast. '
-                        'It may finish running while a worker is assembling a product. '
-                        'Consider slowing it down by >= 0.5 second.')
+            log.warning('''
+                The belt is moving too fast.
+                It may finish running while a worker is assembling a product.
+                Consider slowing it down by >= 0.5 second.
+            ''')
         while time() < end_assembly:
             log.debug(f'Moving the belt while worker ({self.worker_id}) is assembling...')
             self.belt.move_belt()
@@ -277,7 +280,6 @@ def run_simulation(belt: ConveyorBelt, workers: [Worker]) -> List[str]:
     """
     while belt.belt_iterations > 0:
         belt.move_belt()
-        log.info(f'Iteration: {belt.belt_iterations}')
 
         for i in range(belt.belt_length):
             # Special handling for when the belt moves during the assembly process
