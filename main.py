@@ -1,23 +1,22 @@
 """
 Assumptions:
 1) Items can come into the belt at random intervals.
-2) Each slot can hold one component or a finished product (e.g. "P" - bound to user input) or nothing.
-3) Each slot has two workers.
-    - I have made it that each slot can have a dynamic number of workers bound to user input.
-4) Every 1 second, the belt moves one position. This can be user defined.
+2) Each slot can hold one item or a finished product (e.g. "P" - bound to user input).
+3) Each slot can have a dynamic number of workers.
+4) Every N seconds, the belt moves one position.
 5) Each worker can either pick a component or place a finished product onto the slot (one worker operates on each slot).
-6) It takes 3 seconds to assemble an intermediate product or a final product
-    - This means some components will be passing without being picked up by any worker.
-7) During the 3-second assembly time, workers can't interact with the belt.
+6) It takes N seconds to assemble an intermediate product or a final product
+    - If set, it means some components might pass without being picked up by any worker.
+7) During the N-second assembly time, workers can't interact with the belt.
     - Workers can remain holding any two of (component, intermediate product, or a finished product) at a time in each
-     hand e.g. (BC, A) or (None, C) or (None, A), or (P, None)
+     hand e.g. (BC, A) (None, C) (None, A) (ABC, None) or (ABC, B)
 8) There should be an equal chance of any items to enter the belt.
 9) If a worker constructed an intermediate product, look only for the missing final component.
 10) The intermediate product is always assembled and placed in the worker's left hand.
-    - e.g. ('A', 'B') -> ('AB', None) -> found C -> pick C -> ('AB', 'C') -> ('P', None)
+    - e.g. ('A', 'B') -> ('AB', None) -> found C -> pick C -> ('AB', 'C') -> ('ABC', None)
+            -> <finished_product> will be placed on the belt
     - When a final component is found it should be picked by the right hand, then assembled in the left hand
       as presented above.
-11) A unit of time is defined as 1 second
 """
 
 from random import choice
