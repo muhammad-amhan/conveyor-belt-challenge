@@ -349,7 +349,7 @@ if __name__ == '__main__':
         log.error(e)
         exit(ERROR_CODE)
     except KeyboardInterrupt:
-        log.info("Exiting...")
+        log.info('Exiting...')
 
     print('-' * 40)
     log.info(f'The products combinations: {_assembled_products_combinations}')
