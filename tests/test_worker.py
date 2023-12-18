@@ -64,3 +64,6 @@ class TestWorker:
             worker.left_hand = product
             with pytest.raises(InconsistentProduct) as e:
                 assert f'Inconsistent product "{product}" by worker "{worker.worker_id}"' in worker.assembled_finished_product()
+
+    # TODO
+    #   def test_slot_workers_can_pick_required_components(self, factory):

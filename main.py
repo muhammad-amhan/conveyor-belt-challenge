@@ -33,8 +33,7 @@ log = Logger(__name__)
 
 
 class Product:
-    def __init__(self, items: List[str | None], components: List[str], finished_product: str,
-                 item_interval_range: int):
+    def __init__(self, items: List[str | None], components: List[str], finished_product: str):
         """
         A class that defined wha a product is made up of, how often it enters the belt, and what goes onto its slots.
 
@@ -42,10 +41,7 @@ class Product:
         :param components: A list of all components and any other special or alphanumerical or empty characters.
         :param finished_product: A combination of all components mark a finished product
                  e.g. AB12, 1BA2, B2A1 => maps to a value on the belt to mark what the finished product should look like
-        :param item_interval_range: The upper limit range for items to be released onto the slot.
-                The interval is randomly picked from 0 and the specified range.
         """
-        self.item_interval_range = item_interval_range
         self.items = items
         self.components = components
         self.finished_product = finished_product
@@ -95,21 +91,21 @@ class Product:
 class ConveyorBelt:
     assembled_products_combination = []
 
-    def __init__(self, belt_length: int, product: Product, belt_iterations: int, belt_speed: int):
+    def __init__(self, belt_length: int, product: Product, belt_iterations: int, belt_delay: int):
         """
         The belt will pass components, other items, including empty slots.
         :param belt_length: The length of the belt i.e. number of slots to be created.
         :param product: A product object which defines a set of attributes that help provide instructions on how to
                         assemble it and the elements involved in doing so.
                         The use here is to tell the belt what should go on its slots.
-        :param belt_speed: How fast do slots move in seconds
+        :param belt_delay: How fast do slots move in seconds
         :param belt_iterations: The number of belt iterations/steps
         """
         self.slots = [None] * belt_length
         self.belt_length = belt_length
         self.product = product
         self.belt_iterations = belt_iterations
-        self.belt_speed = belt_speed
+        self.belt_delay = belt_delay
         self.unpicked_components_counter = self.generate_counter(self.product.components + ['other'])
         self.finished_products_counter = self.generate_counter(self.product.finished_product)
 
@@ -135,18 +131,19 @@ class ConveyorBelt:
         else:
             self.unpicked_components_counter['other'] += 1
 
-        # The belt can use sleep(1) but not the worker during assembling otherwise it will hold the belt from moving
-        # sleep(0) will cause unexpected behavior. In Python, it may hint to the OS that the current thread
-        #   is willing to giv up its time slot to allow other threads or processes to run. It causes race conditions
-        #   or concurrency issues and so on.
-        if self.belt_speed > 0:
-            sleep(self.belt_speed)
+        # The belt can use sleep(N) but not for the worker during the assembly process because otherwise it will hold
+        #   the belt from moving sleep(0) will cause unexpected behavior.
+        # In Python, it may hint to the OS that the
+        #   current thread is willing to giv up its time slot to allow other threads or processes to run.
+        # It may cause race condition or concurrency issues and so on.
+        if self.belt_delay > 0:
+            sleep(self.belt_delay)
         self.slots = [self.product.get_item_randomly()] + self.slots[:-1]
         # Count each slot move when a worker is assembling
         #   otherwise they are not counted as part of the "steps/iterations" resulting in more iterations than specified
         self.belt_iterations -= 1
-        log.debug(f'Belt: {self.slots}')
-        log.info(f'Iteration: {self.belt_iterations}')
+        log.debug(f'Belt {self.slots}')
+        log.info(f'Iteration {self.belt_iterations}')
 
     def remove_component(self, slot_index: int):
         self.slots[slot_index] = None
@@ -177,7 +174,7 @@ class Worker:
         Worker.next_id += 1
 
     def pick_item(self, item: str) -> bool:
-        if item == self.product.finished_product:
+        if item == self.product.finished_product or item is None:
             return False
         if item not in self.product.components:
             return False
@@ -239,35 +236,35 @@ class Worker:
 
         # Assembling an intermediate product or a finished product takes 3 seconds
         #   during which the belt should continue moving but no worker will interact with it.
-        end_assembly = time() + self.assembly_time
-        if self.assembly_time > 0 and self.belt.belt_speed == 0:
-            log.warning('''
-                The belt is moving too fast.
-                It may finish running while a worker is assembling a product.
-                Consider slowing it down by >= 0.5 second.
-            ''')
-        while time() < end_assembly:
-            log.debug(f'Moving the belt while worker ({self.worker_id}) is assembling...')
-            self.belt.move_belt()
-            # Special handling for when the belt moves during the assembly process
-            #   as it's not captured by the outter while loop.
-            if self.belt.belt_iterations == 0:
-                break
+        if self.assembly_time > 0:
+            end_assembly = time() + self.assembly_time
+    
+            if self.belt.belt_delay == 0:
+                log.warning('''
+                    The belt is moving too fast.
+                    It may finish running while a worker is assembling a product.
+                    Consider slowing it down by >= 0.5 second.
+                ''')
 
-        actual_assembly_duration = time() - (end_assembly - self.assembly_time)
-        log.debug(f'Actual assembly duration: {int(actual_assembly_duration)} seconds')
+            log.debug(f'======> Moving the belt while worker ({self.worker_id}) is assembling...')
+            while time() < end_assembly:
+                self.belt.move_belt()
+                # Special handling for when the belt moves during the assembly process
+                #   as it's not captured by the outter while loop.
+                if self.belt.belt_iterations == 0:
+                    break
+
+            actual_assembly_duration = time() - (end_assembly - self.assembly_time)
+            log.debug(f'Actual assembly duration was {int(actual_assembly_duration)} seconds')
 
         return 'finished' if len(self.left_hand) == len(self.product.components) else 'intermediate'
 
     def release_finished_product(self, slot_index: int) -> bool:
-        if not self.holds_finished_product:
+        if not self.holds_finished_product or self.belt.slots[slot_index] is not None:
             return False
 
         self.belt.slots[slot_index] = self.product.finished_product
         ConveyorBelt.assembled_products_combination.extend([self.left_hand])
-        log.debug(f'Worker ({self.worker_id}) released a product ({self.left_hand}): {self.belt.slots}')
-
-        self.reset_left_hand()
         return True
 
 
@@ -286,27 +283,30 @@ def run_simulation(belt: ConveyorBelt, workers: [Worker]) -> List[str]:
             if belt.belt_iterations == 0:
                 break
 
-            item = belt.slots[i]
             workers_per_slot = workers[i]
 
             for worker in workers_per_slot:
+                item = belt.slots[i]
+                
                 product_type = worker.assemble()
                 if product_type is not None:
-                    log.info(f'Worker ({worker.worker_id}) assembled {product_type} product: ({worker.left_hand} | {worker.right_hand})')
-
-                elif item is None:
-                    worker.release_finished_product(slot_index=i)
-                elif item is not None:
-                    if not worker.pick_item(item):
-                        log.debug(f'Nothing for worker ({worker.worker_id})')
-                        break
-
-                    log.debug(f'Worker ({worker.worker_id}) picked a component: {item}')
-                    log.debug(f'Worker ({worker.worker_id}) hands: ({worker.left_hand} | {worker.right_hand})')
+                    log.info(f'Worker ({worker.worker_id}) assembled {product_type} product ({worker.left_hand} | {worker.right_hand})')
+                
+                elif worker.release_finished_product(slot_index=i):
+                    log.debug(f'Worker ({worker.worker_id}) released a product ({worker.left_hand}) => {worker.belt.slots}')
+                    worker.reset_left_hand()
+   
+                elif worker.pick_item(item):
+                    log.info(f'Worker ({worker.worker_id}) picked a component ({item})')
+                    log.info(f'Worker ({worker.worker_id}) hands ({worker.left_hand} | {worker.right_hand})')
                     belt.remove_component(slot_index=i)
+
+                else:
+                    log.debug(f'Worker({worker.worker_id}) no action')
 
                 # Update left hand status
                 worker.holds_finished_product = worker.assembled_finished_product()
+
         log.info('-' * 40)
 
     return ConveyorBelt.assembled_products_combination
@@ -318,13 +318,12 @@ if __name__ == '__main__':
     #  These configs can be passed via CLI using args parser
     _debug = True
     _belt_length = 5
-    _workers_per_slot = 1
-    _belt_iterations = 1000
-    _belt_speed = 1
+    _workers_per_slot = 2
+    _belt_iterations = 100
+    _belt_delay = 1
     _finished_product = 'P'
     _assembly_time = 3
     _assembled_products_combinations = []
-    _item_interval_range = 2
 
     log.configure_logging(_debug)
 
@@ -333,10 +332,9 @@ if __name__ == '__main__':
         items=['A', 'B', 'C', 'D', None],
         components=['A', 'B', 'C'],
         finished_product=_finished_product,
-        item_interval_range=_item_interval_range,
     )
     _product.validate()
-    _belt = ConveyorBelt(_belt_length, _product, _belt_iterations, _belt_speed)
+    _belt = ConveyorBelt(_belt_length, _product, _belt_iterations, _belt_delay)
     _workers = [
         [Worker(_belt, _product, _assembly_time) for _ in range(_workers_per_slot)]
         for _ in range(_belt_length)

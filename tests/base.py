@@ -9,26 +9,23 @@ class Factory:
             finished_product='P',
             assembly_time=0,
             workers_per_slot=1,
-            belt_speed=0,
-            item_interval_range=0,
+            belt_delay=0,
             debug=False,
     ):
         self.belt_length = belt_length
         self.belt_iterations = belt_iterations
-        self.belt_speed = belt_speed
+        self.belt_delay = belt_delay
         self.finished_product = finished_product
         self.assembly_time = assembly_time
         self.workers_per_slot = workers_per_slot
-        self.item_interval_range = item_interval_range
         self.debug = debug
 
         self.product = Product(
             items=['A', 'B', 'C', 'D', 'E', 'F', None],
             components=['A', 'B', 'C'],
             finished_product=self.finished_product,
-            item_interval_range=self.item_interval_range,
         )
-        self.belt = ConveyorBelt(self.belt_length, self.product, self.belt_iterations, self.belt_speed)
+        self.belt = ConveyorBelt(self.belt_length, self.product, self.belt_iterations, self.belt_delay)
 
         self.workers = [
             [Worker(self.belt, self.product) for _ in range(self.workers_per_slot)]
