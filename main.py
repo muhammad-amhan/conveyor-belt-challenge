@@ -109,6 +109,9 @@ class ConveyorBelt:
         self.unpicked_components_counter = self.generate_counter(self.product.components + ['other'])
         self.finished_products_counter = self.generate_counter(self.product.finished_product)
 
+    def __str__(self):
+        return f'Belt {self.slots} at iteration {self.belt_iterations}'
+
     @staticmethod
     def generate_counter(data: List[str] | str) -> Dict[str, int]:
         local_data = data
@@ -142,8 +145,7 @@ class ConveyorBelt:
         # Count each slot move when a worker is assembling
         #   otherwise they are not counted as part of the "steps/iterations" resulting in more iterations than specified
         self.belt_iterations -= 1
-        log.debug(f'Belt {self.slots}')
-        log.info(f'Iteration {self.belt_iterations}')
+        log.info(self.__str__())
 
     def remove_component(self, slot_index: int):
         self.slots[slot_index] = None
@@ -172,6 +174,9 @@ class Worker:
         self.worker_id = Worker.next_id
         self.holds_finished_product = False
         Worker.next_id += 1
+
+    def __str__(self):
+        return f'Worker ({self.worker_id}) hands ({self.left_hand} | {self.right_hand})'
 
     def pick_item(self, item: str) -> bool:
         if item == self.product.finished_product or item is None:
@@ -287,8 +292,8 @@ def run_simulation(belt: ConveyorBelt, workers: [Worker]) -> List[str]:
 
             for worker in workers_per_slot:
                 item = belt.slots[i]
-                
                 product_type = worker.assemble()
+
                 if product_type is not None:
                     log.info(f'Worker ({worker.worker_id}) assembled {product_type} product ({worker.left_hand} | {worker.right_hand})')
                 
@@ -298,7 +303,6 @@ def run_simulation(belt: ConveyorBelt, workers: [Worker]) -> List[str]:
    
                 elif worker.pick_item(item):
                     log.info(f'Worker ({worker.worker_id}) picked a component ({item})')
-                    log.info(f'Worker ({worker.worker_id}) hands ({worker.left_hand} | {worker.right_hand})')
                     belt.remove_component(slot_index=i)
 
                 else:
@@ -306,9 +310,9 @@ def run_simulation(belt: ConveyorBelt, workers: [Worker]) -> List[str]:
 
                 # Update left hand status
                 worker.holds_finished_product = worker.assembled_finished_product()
+                log.info(str(worker))
 
         log.info('-' * 40)
-
     return ConveyorBelt.assembled_products_combination
 
 
@@ -348,10 +352,9 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         log.info('Exiting...')
 
-    print('-' * 40)
+    print(f'======== Execution time: {(timer() - start):.1f} seconds ========')
     log.info(f'The products combinations: {_assembled_products_combinations}')
     log.info(f'Unpicked components: {_belt.unpicked_components_counter}')
     log.info(f'Finished products: {_belt.finished_products_counter}')
 
-    print(f'======== Execution time: {(timer() - start):.1f} seconds ========')
     exit(SUCCESS_CODE)
