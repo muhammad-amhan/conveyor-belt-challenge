@@ -18,16 +18,22 @@ Assumptions:
     - When a final component is found it should be picked by the right hand, then assembled in the left hand
       as presented above.
 """
-
 from random import choice
 from time import sleep, time
 from typing import Dict, List
 from timeit import default_timer as timer
-from utilities.error_handling import EmptySlotRequired, InvalidComponent, DuplicateComponent, InconsistentProduct
-from utilities.logger import Logger
+from config.schema import BELT_SCHEMA
+from utilities.constants import ERROR_CODE, SUCCESS_CODE
+from utilities.error_handling import (
+    EmptySlotRequired,
+    InvalidComponent,
+    DuplicateComponent,
+    InconsistentProduct,
+)
+from jsonschema import validate, ValidationError
 
-ERROR_CODE = 1
-SUCCESS_CODE = 0
+from utilities.helpers import JSONFileHandler
+from utilities.logger import Logger
 
 log = Logger(__name__)
 
@@ -317,18 +323,26 @@ def run_simulation(belt: ConveyorBelt, workers: [Worker]) -> List[str]:
 
 
 if __name__ == '__main__':
+    json_handler = JSONFileHandler()
+    config = json_handler.read_json('config/config.json')
+    try:
+        validate(instance=config, schema=BELT_SCHEMA)
+    except ValidationError as e:
+        log.error(f'Invalid Belt Config \'{e.path[-1] if e.path else None}\': {e.message}')
+        exit(ERROR_CODE)
+
     # Measure execution
     start = timer()
-    #  These configs can be passed via CLI using args parser
-    _debug = True
-    _belt_length = 5
-    _workers_per_slot = 2
-    _belt_iterations = 100
-    _belt_delay = 1
-    _finished_product = 'P'
-    _assembly_time = 3
-    _assembled_products_combinations = []
 
+    _debug = config.get('debug', False)
+    _belt_length = config['belt']['belt_length']
+    _belt_iterations = config['belt']['belt_iterations']
+    _belt_delay = config['belt']['belt_delay']
+    _workers_per_slot = config['workers_per_slot']
+    _finished_product = config['finished_product']
+    _assembly_time = config['assembly_time']
+
+    _assembled_products_combinations = []
     log.configure_logging(_debug)
 
     _product = Product(
@@ -338,6 +352,7 @@ if __name__ == '__main__':
         finished_product=_finished_product,
     )
     _product.validate()
+
     _belt = ConveyorBelt(_belt_length, _product, _belt_iterations, _belt_delay)
     _workers = [
         [Worker(_belt, _product, _assembly_time) for _ in range(_workers_per_slot)]

@@ -1,0 +1,9 @@
+{
+    "debug": false,
+    "belt": {
+        "belt_length": 5
+    },
+    "workers_per_slot": 2,
+    "finished_product": "P",
+    "assembly_time": 3
+}
