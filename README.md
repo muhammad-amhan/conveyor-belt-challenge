@@ -3,6 +3,26 @@
 ## Exercise Details
 Please check the challenge question details [here](exercise/exercise.txt).
 
+## Requirements
+- `Python >= 3.10` due to the use of `|` for type checks using typings
+```bash
+> git clone https://github.com/your_username/your_project.git
+> cd conveyor-belt
+> pip3 install -r requirements.txt
+```
+
+## Run the Simulation
+- Modify the JSON [config](config/config.json)
+```bash 
+> python3 main.py
+```
+
+## Run Tests
+Tests are under [tests/](tests):
+```bash
+> pytest tests/
+```
+
 ## Assumptions
 Some personal assumptions were needed to fill-in gaps and make sense of the task. Here are some:
 * Items can come into the belt at random intervals.
