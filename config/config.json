@@ -1,7 +1,9 @@
 {
     "debug": false,
     "belt": {
-        "belt_length": 5
+        "belt_length": 5,
+        "belt_delay": 1,
+        "belt_iterations": 100
     },
     "workers_per_slot": 2,
     "finished_product": "P",
